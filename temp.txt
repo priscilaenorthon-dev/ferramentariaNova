@@ -1,0 +1,276 @@
+<?php
+require_once __DIR__ . '/inc/auth.php';
+if (usuarioTemPerfil('Usuario')) {
+    header('Location: dashboard.php');
+    exit;
+}
+require_once __DIR__ . '/inc/db.php';
+
+$paginaTitulo = 'Calibração';
+
+$erroCarregamento = '';
+$calibracoes = [];
+$statusCards = [
+    'Vencida' => 0,
+    'Próxima' => 0,
+    'Em dia' => 0,
+];
+
+function formatarDataBr(?string $data): string
+{
+    if (empty($data) || $data === '0000-00-00') {
+        return '-';
+    }
+    try {
+        return (new DateTime($data))->format('d/m/Y');
+    } catch (Exception $e) {
+        return '-';
+    }
+}
+
+function formatarDias(?int $diasRestantes, ?string $proxima): string
+{
+    if (empty($proxima) || $diasRestantes === null) {
+        return 'Sem previsão';
+    }
+    if ($diasRestantes < 0) {
+        return abs($diasRestantes) . ' dias atrasado';
+    }
+    if ($diasRestantes === 0) {
+        return 'Vence hoje';
+    }
+    return 'Em ' . $diasRestantes . ' dias';
+}
+
+try {
+    $statsStmt = $pdo->query('SELECT status, COUNT(*) AS total FROM calibracoes GROUP BY status');
+    while ($row = $statsStmt->fetch()) {
+        $status = $row['status'] ?? '';
+        $total = (int)($row['total'] ?? 0);
+        if (!isset($statusCards[$status])) {
+            $statusCards[$status] = 0;
+        }
+        $statusCards[$status] += $total;
+    }
+
+    $calibracoesStmt = $pdo->query('SELECT f.codigo, f.descricao, c.ultima_calibracao, c.proxima_calibracao, c.status,
+        DATEDIFF(c.proxima_calibracao, CURDATE()) AS dias_restantes
+        FROM calibracoes c
+        INNER JOIN ferramentas f ON f.id = c.ferramenta_id
+        ORDER BY c.status DESC, c.proxima_calibracao ASC');
+    $calibracoes = $calibracoesStmt->fetchAll();
+} catch (PDOException $e) {
+    $erroCarregamento = 'Não foi possível carregar os dados de calibração. Tente novamente mais tarde.';
+}
+
+include __DIR__ . '/inc/header.php';
+include __DIR__ . '/inc/sidebar.php';
+?>
+<div class="content-area calibracao-page">
+    <div class="page-header with-actions">
+        <div>
+            <h1>Controle de Calibração</h1>
+            <span>Acompanhe as ferramentas que necessitam calibração periódica</span>
+        </div>
+        <div class="page-actions">
+            <button class="btn-ghost">&#128190; Exportar Excel</button>
+            <button class="btn-ghost">&#128190; Exportar PDF</button>
+        </div>
+    </div>
+
+    <?php if ($erroCarregamento): ?>
+        <div class="alert alert-danger rounded-3 py-2 px-3"><?= htmlspecialchars($erroCarregamento); ?></div>
+    <?php endif; ?>
+
+    <div class="summary-grid">
+        <div class="summary-card danger">
+            <div>
+                <span>Vencidas</span>
+                <strong><?= (int)($statusCards['Vencida'] ?? 0); ?></strong>
+                <small>Requer atenção imediata</small>
+            </div>
+            <div class="summary-icon">&#9888;</div>
+        </div>
+        <div class="summary-card warning">
+            <div>
+                <span>Próximas (10 dias)</span>
+                <strong><?= (int)($statusCards['Próxima'] ?? 0); ?></strong>
+                <small>Vencimento próximo</small>
+            </div>
+            <div class="summary-icon">&#9200;</div>
+        </div>
+        <div class="summary-card success">
+            <div>
+                <span>Em Dia</span>
+                <strong><?= (int)($statusCards['Em dia'] ?? 0); ?></strong>
+                <small>Calibração em dia</small>
+            </div>
+            <div class="summary-icon">&#9989;</div>
+        </div>
+    </div>
+
+    <div class="filters-row">
+        <div class="search-box">
+            <span>&#128269;</span>
+            <input type="search" placeholder="Buscar por código ou descrição..." data-table-filter="#tabela-calibracao">
+        </div>
+        <select class="filter-select" id="statusFilterCalib">
+            <option value="">Todos os status</option>
+            <?php foreach (array_keys($statusCards) as $status): ?>
+                <option value="<?= htmlspecialchars(mb_strtolower($status, 'UTF-8')); ?>"><?= htmlspecialchars($status); ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <div class="table-wrapper">
+        <table id="tabela-calibracao">
+            <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nome</th>
+                <th>Última Calibração</th>
+                <th>Próxima Calibração</th>
+                <th>Dias Restantes</th>
+                <th>Urgência</th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php if (empty($calibracoes)): ?>
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">Nenhuma calibração cadastrada.</td>
+                </tr>
+            <?php else: ?>
+                <?php
+                $badgeMap = [
+                    'vencida' => 'badge-danger',
+                    'próxima' => 'badge-warning',
+                    'proxima' => 'badge-warning',
+                    'em dia' => 'badge-success',
+                ];
+                foreach ($calibracoes as $item):
+                    $statusLower = mb_strtolower($item['status'] ?? '', 'UTF-8');
+                    $badge = $badgeMap[$statusLower] ?? 'badge-neutral';
+                    $search = mb_strtolower(($item['codigo'] ?? '') . ' ' . ($item['descricao'] ?? ''), 'UTF-8');
+                    ?>
+                    <tr data-search="<?= htmlspecialchars($search); ?>" data-status="<?= htmlspecialchars($statusLower); ?>">
+                        <td><span class="code-pill"><?= htmlspecialchars($item['codigo']); ?></span></td>
+                        <td><?= htmlspecialchars($item['descricao']); ?></td>
+                        <td><?= htmlspecialchars(formatarDataBr($item['ultima_calibracao'] ?? null)); ?></td>
+                        <td><?= htmlspecialchars(formatarDataBr($item['proxima_calibracao'] ?? null)); ?></td>
+                        <td class="<?= $statusLower === 'vencida' ? 'text-danger' : ''; ?>">
+                            <?= htmlspecialchars(formatarDias($item['dias_restantes'] !== null ? (int)$item['dias_restantes'] : null, $item['proxima_calibracao'] ?? null)); ?>
+                        </td>
+                        <td><span class="badge <?= $badge; ?>"><?= htmlspecialchars($item['status'] ?? '-'); ?></span></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .calibracao-page { padding-top: 1rem; }
+    .btn-ghost {
+        border: 1px solid #E5E7EB;
+        border-radius: 0.75rem;
+        padding: 0.55rem 1rem;
+        background: #FFF;
+        color: #374151;
+        font-weight: 600;
+    }
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.2rem;
+    }
+    .summary-card {
+        border-radius: 1rem;
+        padding: 1rem 1.2rem;
+        border: 1px solid #E5E7EB;
+        background: #FFF;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .summary-card span { font-size: 0.9rem; color: #6B7280; }
+    .summary-card strong { font-size: 1.9rem; }
+    .summary-card small { color: #9CA3AF; }
+    .summary-card .summary-icon { font-size: 1.6rem; }
+    .summary-card.danger { border-color: #FECACA; }
+    .summary-card.warning { border-color: #FDE68A; }
+    .summary-card.success { border-color: #BBF7D0; }
+    .filters-row {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    .search-box {
+        position: relative;
+        flex: 1;
+        min-width: 220px;
+    }
+    .search-box span {
+        position: absolute;
+        left: 0.8rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9CA3AF;
+    }
+    .search-box input {
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid #CBD5F5;
+        padding: 0.6rem 0.6rem 0.6rem 2.3rem;
+    }
+    .filter-select {
+        border-radius: 0.75rem;
+        border: 1px solid #CBD5F5;
+        padding: 0.6rem;
+        min-width: 180px;
+    }
+    .table-wrapper {
+        background: #FFF;
+        border-radius: 1rem;
+        border: 1px solid #E5E7EB;
+        overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.9rem 1rem; border-bottom: 1px solid #F3F4F6; text-align: left; }
+    th { text-transform: uppercase; font-size: 0.75rem; color: #6B7280; letter-spacing: 0.05em; background: #F9FAFB; }
+    .code-pill { background: #F3F4F6; padding: 0.25rem 0.6rem; border-radius: 0.6rem; font-weight: 600; display: inline-block; }
+    .badge { border-radius: 999px; padding: 0.3rem 0.9rem; font-size: 0.8rem; font-weight: 600; }
+    .badge-danger { background: #FEE2E2; color: #B91C1C; }
+    .badge-warning { background: #FEF3C7; color: #B45309; }
+    .badge-success { background: #DCFCE7; color: #166534; }
+    .badge-neutral { background: #E5E7EB; color: #374151; }
+    .text-danger { color: #B91C1C; font-weight: 600; }
+    @media (max-width: 768px) {
+        .filters-row { flex-direction: column; }
+        .filter-select { width: 100%; }
+    }
+</style>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.querySelector('[data-table-filter="#tabela-calibracao"]');
+        const statusSelect = document.getElementById('statusFilterCalib');
+        const rows = Array.from(document.querySelectorAll('#tabela-calibracao tbody tr[data-search]'));
+
+        function applyFilters() {
+            const term = (searchInput?.value || '').toLowerCase();
+            const status = (statusSelect?.value || '').toLowerCase();
+
+            rows.forEach((row) => {
+                const matchesSearch = row.dataset.search.includes(term);
+                const matchesStatus = !status || row.dataset.status === status;
+                row.style.display = (matchesSearch && matchesStatus) ? '' : 'none';
+            });
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applyFilters);
+        if (statusSelect) statusSelect.addEventListener('change', applyFilters);
+    });
+</script>
+<?php include __DIR__ . '/inc/footer.php'; ?>

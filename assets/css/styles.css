@@ -1,0 +1,103 @@
+body {
+    background-color: #f5f7fb;
+    min-height: 100vh;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1050;
+}
+
+.app-wrapper {
+    min-height: calc(100vh - 64px);
+}
+
+.sidebar {
+    width: 240px;
+    background-color: #fff;
+}
+
+.sidebar .sidebar-inner {
+    padding: 1.5rem 1rem;
+}
+
+.sidebar .nav-link {
+    color: #39424e;
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.9rem;
+    font-weight: 500;
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+    background-color: #0d6efd;
+    color: #fff;
+}
+
+.content-area {
+    background-color: #f5f7fb;
+}
+
+.card {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 0.25rem 1rem rgba(15, 23, 42, 0.08);
+}
+
+.table thead th {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+}
+
+.status-pill {
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-disponivel {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.status-emprestada {
+    background-color: #cff4fc;
+    color: #055160;
+}
+
+.status-manutencao {
+    background-color: #ffe5d3;
+    color: #663c00;
+}
+
+.status-atrasado {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+.status-andamento {
+    background-color: #e2e3ff;
+    color: #343a40;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.qr-preview {
+    width: 140px;
+    height: 140px;
+    object-fit: cover;
+    border: 1px solid #dee2e6;
+    border-radius: 1rem;
+    padding: 0.5rem;
+    background-color: #fff;
+}
